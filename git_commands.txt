@@ -1,0 +1,52 @@
+# Guide de déploiement GitHub pour Portfolio Manager Pro
+# Exécutez ces commandes dans PowerShell/Terminal
+
+# 1. Vérifier que Git est installé
+git --version
+
+# 2. Configurer Git (si pas déjà fait)
+git config --global user.name "Votre Nom"
+git config --global user.email "votre.email@example.com"
+
+# 3. Initialiser le repository
+git init
+
+# 4. Ajouter tous les fichiers
+git add .
+
+# 5. Premier commit
+git commit -m "🎉 Initial commit: Portfolio Manager Pro v1.0
+
+✨ Features:
+- Advanced dashboard with financial projections
+- Intelligent ETF search (1983+ ETFs) 
+- Complete portfolio management
+- Adaptive design (dark/light mode)
+- Multi-page Streamlit interface
+
+🛠 Tech Stack:
+- Streamlit 1.49+
+- Pandas 2.0+
+- Plotly 5.15+
+- Modern CSS with adaptive variables
+
+📈 Validated financial calculations:
+- Compound interest with monthly contributions
+- Allocation-weighted returns
+- 40-year projections"
+
+# 6. Ajouter le remote GitHub (REMPLACEZ [VOTRE-USERNAME])
+git remote add origin https://github.com/[VOTRE-USERNAME]/portfolioapp.git
+
+# 7. Renommer la branche principale
+git branch -M main
+
+# 8. Push initial
+git push -u origin main
+
+# 9. Commandes futures utiles
+# git status               # Voir les changements
+# git add .                # Ajouter tous les fichiers modifiés
+# git commit -m "message"  # Committer avec un message
+# git push                 # Envoyer vers GitHub
+# git pull                 # Récupérer depuis GitHub

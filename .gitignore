@@ -1,0 +1,35 @@
+# Fichiers temporaires Python
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Fichiers Streamlit
+.streamlit/secrets.toml
+
+# Fichiers de données temporaires
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Fichiers de sauvegarde
+*.bak
+*.backup

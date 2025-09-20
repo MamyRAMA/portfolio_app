@@ -1,0 +1,19 @@
+CLASSE,CATEGORIE_ORIGINALE,CATEGORIE_LISIBLE,DESCRIPTION
+CLASSE 1,equities,Actions,Investissement en actions d'entreprises
+CLASSE 1,bonds,Obligations,Titres de créance à revenus fixes
+CLASSE 1,cash,Monétaire,Instruments du marché monétaire
+CLASSE 1,securitized,Titrisés,Produits titrisés et structurés
+CLASSE 1,commodities,Matières Premières,Investissement en commodités
+CLASSE 2,core,Généralistes,Expositions larges et diversifiées
+CLASSE 2,thematic,Thématiques,Investissements sectoriels ou thématiques
+CLASSE 2,government,Obligations Souveraines,Dette des États et organismes publics
+CLASSE 2,corporate,Obligations Corporate,Dette d'entreprises privées
+CLASSE 2,smartbeta,Smart Beta,Stratégies factorielles et quantitatives
+CLASSE 2,emerging,Marchés Émergents,Expositions aux économies émergentes
+CLASSE 2,sector,Sectoriels,Concentration sur des secteurs spécifiques
+CLASSE 2,aggregate,Obligations Globales,Expositions obligataires diversifiées
+CLASSE 2,short,Court Terme,Maturités courtes et faible duration
+CLASSE 2,leverage,Leveragés,Produits à effet de levier
+CLASSE 3,dm,Marchés Développés,Pays développés (Europe États-Unis Japon)
+CLASSE 3,em,Marchés Émergents,Économies émergentes et frontières
+CLASSE 3,world,Monde,Exposition mondiale diversifiée
