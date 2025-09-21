@@ -29,7 +29,7 @@ if not st.session_state.get('portfolio', []):
     
     etf_data = load_etf_data()
     if not etf_data.empty:
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.metric("ETFs Disponibles", len(etf_data))
@@ -46,7 +46,11 @@ if not st.session_state.get('portfolio', []):
             if 'PEA' in etf_data.columns:
                 pea_eligible = (etf_data['PEA'] == 'Y').sum()
                 st.metric("ETFs Éligibles PEA", pea_eligible)
-    
+        with col5:
+            if 'ASSVIE' in etf_data.columns:
+                assvie_eligible = (etf_data['ASSVIE'] == 'Y').sum()
+                st.metric("ETFs Éligibles ASSVIE", assvie_eligible)
+
     st.stop()
 
 # Calcul des métriques du portfolio
@@ -121,7 +125,8 @@ for pos in st.session_state.portfolio:
         'Performance (%)': round(performance, 2),
         'Classe': pos.get('classe_1', 'N/A'),
         'Frais (%)': pos.get('frais', 0),
-        'PEA': '✅' if pos.get('pea') == 'Y' else '❌'
+        'PEA': '✅' if pos.get('pea') == 'Y' else '❌',
+        'ASS VIE': '✅' if pos.get('assvie') == 'Y' else '❌'
     })
 
 if positions_display:
@@ -137,11 +142,12 @@ if positions_display:
         'Prix Actuel (€)': st.column_config.NumberColumn("Prix Actuel", format="%.2f €"),
         'Date Achat': st.column_config.DateColumn("Date Achat"),
         'Valeur (€)': st.column_config.NumberColumn("Valeur", format="%.2f €"),
-        'Plus-Value (€)': st.column_config.NumberColumn("Plus-Value", format="%.2f €"),
-        'Performance (%)': st.column_config.NumberColumn("Perf %", format="%.2f%%"),
+        'Plus-Value (€)': st.column_config.NumberColumn("Plus-Value", format="%.1f €"),
+        'Performance (%)': st.column_config.NumberColumn("Perf %", format="%.1f%%"),
         'Classe': st.column_config.TextColumn("Classe", width="small"),
         'Frais (%)': st.column_config.NumberColumn("Frais", format="%.2f%%"),
-        'PEA': st.column_config.TextColumn("PEA", width="small")
+        'PEA': st.column_config.TextColumn("PEA", width="small"),
+        'ASS VIE': st.column_config.TextColumn("ASS VIE", width="small")
     }
     
     # Tableau interactif

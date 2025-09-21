@@ -35,8 +35,8 @@ tab1, tab2 = st.tabs(["🔍 Recherche ETF", "⭐ Mon Univers"])
 with tab1:
     # Statistiques générales
     st.subheader("📊 Vue d'Ensemble")
-    
-    col1, col2, col3, col4 = st.columns(4)
+
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.metric("ETFs Disponibles", f"{len(etf_data):,}")
     with col2:
@@ -46,10 +46,17 @@ with tab1:
         if 'CLASSE 1' in etf_data.columns:
             st.metric("Classes d'Actifs", etf_data['CLASSE 1'].nunique())
     with col4:
+        if 'CLASSE 2' in etf_data.columns:
+            st.metric("Sous-Classes", etf_data['CLASSE 2'].nunique())
+    with col5:
         if 'PEA' in etf_data.columns:
-            pea_count = (etf_data['PEA'] == 'O').sum()
-            st.metric("ETFs Éligibles PEA", f"{pea_count:,}")
-    
+            pea_count = (etf_data['PEA'] == 'Y').sum()
+            st.metric("Éligibles PEA", f"{pea_count:,}")
+    with col6:
+        if 'ASSVIE' in etf_data.columns:
+            asv_count = (etf_data['ASSVIE'] == 'Y').sum()
+            st.metric("Éligibles Assurance Vie", f"{asv_count:,}")
+
     st.markdown("---")
     
     # Interface de recherche et filtres
@@ -70,16 +77,36 @@ with tab1:
             classe_1_options = ['Tous'] + sorted(etf_data['CLASSE 1'].dropna().unique().tolist())
             selected_classe_1 = st.selectbox("Classe d'Actifs", classe_1_options)
         
+        # Filtre Classe 2 (nouveau)
+        if 'CLASSE 2' in etf_data.columns:
+            classe_2_options = ['Tous'] + sorted(etf_data['CLASSE 2'].dropna().unique().tolist())
+            selected_classe_2 = st.selectbox("Sous-Classe d'Actifs", classe_2_options)
+        
         # Filtre par fournisseur
         if 'PROVIDER' in etf_data.columns:
             provider_options = ['Tous'] + sorted(etf_data['PROVIDER'].dropna().unique().tolist())
             selected_provider = st.selectbox("Fournisseur", provider_options)
+        
+        # Filtre par broker (nouveau)
+        broker_options = ['Tous', 'XTB', 'ING', 'SCALABLE', 'EASYBOURSE', 'BOURSO', 'BOURSEDIRECT', 'ETORO']
+        selected_broker = st.selectbox(
+            "Courtier/Broker", 
+            broker_options,
+            help="Filtrer par disponibilité chez un courtier spécifique"
+        )
         
         # Filtre éligibilité PEA
         if 'PEA' in etf_data.columns:
             pea_filter = st.selectbox(
                 "Éligibilité PEA", 
                 ['Tous', 'Éligible PEA', 'Non éligible PEA']
+            )
+
+        # Filtre éligibilité Assurance Vie (nouveau)
+        if 'ASSVIE' in etf_data.columns:
+            assvie_filter = st.selectbox(
+                "Éligibilité Assurance Vie", 
+                ['Tous', 'Éligible Assurance Vie', 'Non éligible Assurance Vie']
             )
         
         # Filtre par frais de gestion
@@ -91,7 +118,7 @@ with tab1:
                     min_value=0.0,
                     max_value=float(frais_data.max()),
                     value=float(frais_data.max()),
-                    step=0.01,
+                    step=0.1,
                     format="%.2f%%"
                 )
         
@@ -112,10 +139,16 @@ with tab1:
         filters = {}
         if 'selected_classe_1' in locals() and selected_classe_1 != 'Tous':
             filters['classe_1'] = [selected_classe_1]
+        if 'selected_classe_2' in locals() and selected_classe_2 != 'Tous':
+            filters['classe_2'] = [selected_classe_2]
         if 'selected_provider' in locals() and selected_provider != 'Tous':
             filters['provider'] = [selected_provider]
+        if 'selected_broker' in locals() and selected_broker != 'Tous':
+            filters['broker'] = selected_broker
         if 'pea_filter' in locals() and pea_filter != 'Tous':
             filters['pea'] = pea_filter == 'Éligible PEA'
+        if 'assvie_filter' in locals() and assvie_filter != 'Tous':
+            filters['assvie'] = assvie_filter == 'Éligible Assurance Vie'
         if 'max_frais' in locals():
             filters['frais_max'] = max_frais
         
@@ -212,7 +245,7 @@ with tab1:
                                     st.write(f"**Classe:** {etf.get('CLASSE 1', 'N/A')}")
                                 with detail_col2:
                                     st.write(f"**Frais:** {etf.get('FRAIS DE GESTION', 0):.2f}%")
-                                    st.write(f"**AUM:** {etf.get('ENCOURS SOUS GESTION (EUR)', 0):.0f} M€")
+                                    st.write(f"**AUM:** {etf.get('ENCOURS SOUS GESTION (EUR)', 0):,.0f} M€".replace(',', ' '))
                                     st.write(f"**PEA:** {'✅' if etf.get('PEA') == 'Y' else '❌'}")
                                     st.write(f"**Assurance Vie:** {'✅' if etf.get('ASSVIE') == 'Y' else '❌'}")
                                     st.write(f"**Hedgé:** {'✅' if etf.get('HEDGED') == 'Y' else '❌'}")
@@ -231,7 +264,7 @@ with tab2:
         st.info("📭 Votre univers d'investissement est vide. Utilisez l'onglet 'Recherche ETF' pour ajouter des ETFs favoris.")
     else:
         # Statistiques de l'univers
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.metric("ETFs dans l'Univers", len(st.session_state.univers_etf))
@@ -245,6 +278,10 @@ with tab2:
             st.metric("Éligibles PEA", f"{pea_count}/{len(st.session_state.univers_etf)}")
         
         with col4:
+            asv_count = sum(1 for etf in st.session_state.univers_etf if etf.get('assvie') == 'Y')
+            st.metric("Éligibles Assurance Vie", f"{asv_count}/{len(st.session_state.univers_etf)}")
+
+        with col5:
             expected_return = sum(etf.get('expected_return', 0.05) for etf in st.session_state.univers_etf) / len(st.session_state.univers_etf)
             st.metric("Rendement Moyen", f"{expected_return*100:.1f}%")
         
@@ -264,7 +301,7 @@ with tab2:
                 
                 with col2:
                     st.write(f"**Frais:** {etf.get('frais', 0):.2f}%")
-                    st.write(f"**AUM:** {etf.get('aum', 0):.0f} M€")
+                    st.write(f"**AUM:** {etf.get('aum', 0):,.0f} M€".replace(',', ' '))
                     st.write(f"**PEA:** {'✅' if etf.get('pea') == 'Y' else '❌'}")
                     st.write(f"**Assurance Vie:** {'✅' if etf.get('assvie') == 'Y' else '❌'}")
                     st.write(f"**Hedgé:** {'✅' if etf.get('hedged') == 'Y' else '❌'}")

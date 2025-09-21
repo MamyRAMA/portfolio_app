@@ -25,7 +25,8 @@ def load_etf_data() -> pd.DataFrame:
                 'ISIN', 'NOM', 'PROVIDER', 'FRAIS DE GESTION', 
                 'ENCOURS SOUS GESTION (EUR)', 'CLASSE 1', 'CLASSE 2', 'CLASSE 3',
                 'PEA', 'ASSVIE', 'HEDGED', 'DEVISE ETF', 'EXP_MACRO_RETURN', 
-                'Exp_Eqy_return', 'SFDR', 'LIEN'
+                'SFDR', 'LIEN', 'CLASSE 4', 'CLASSE 5', 'Asset_Class', 'Asset_Geo_Area',
+                'XTB', 'ING', 'SCALABLE', 'EASYBOURSE', 'BOURSO', 'BOURSEDIRECT', 'ETORO'
             ]
             # Garder seulement les colonnes essentielles qui existent
             available_cols = [col for col in essential_cols if col in df.columns]
@@ -61,12 +62,14 @@ def load_category_mapping() -> pd.DataFrame:
             # Mapping par défaut
             default_mapping = pd.DataFrame({
                 'CLASSE': ['CLASSE 1', 'CLASSE 1', 'CLASSE 1'],
-                'CATEGORIE_ORIGINALE': ['equities', 'bonds', 'cash'],
-                'CATEGORIE_LISIBLE': ['Actions', 'Obligations', 'Monétaire'],
+                'CATEGORIE_ORIGINALE': ['equities', 'bonds', 'cash','commodities','securitized'],
+                'CATEGORIE_LISIBLE': ['Actions', 'Obligations', 'Monétaire', 'Matières Premières', 'Titrisé'],
                 'DESCRIPTION': [
                     'Investissement en actions d\'entreprises',
                     'Titres de créance à revenus fixes',
-                    'Instruments du marché monétaire'
+                    'Instruments du marché monétaire',
+                    'Investissement en matières premières physiques',
+                    'Titres adossés à des actifs comme les MBS'
                 ]
             })
             return default_mapping
@@ -80,7 +83,14 @@ def filter_etf_data(df: pd.DataFrame, filters: Dict) -> pd.DataFrame:
     
     Args:
         df: DataFrame des ETFs
-        filters: Dictionnaire des filtres à appliquer
+        filters: Dictionnaire des filtres à appliquer. Clés supportées :
+            - 'classe_1', 'classe_2' (list)
+            - 'provider' (list)
+            - 'pea' (bool)
+            - 'frais_max' (float)
+            - 'broker' (str) ou 'brokers' (list) : valeurs possibles
+              'XTB','ING','SCALABLE','EASYBOURSE','BOURSO','BOURSEDIRECT','ETORO','TOUS'
+              La valeur 'TOUS' désactive le filtre broker
         
     Returns:
         DataFrame filtré
@@ -89,17 +99,37 @@ def filter_etf_data(df: pd.DataFrame, filters: Dict) -> pd.DataFrame:
     
     if 'classe_1' in filters and filters['classe_1']:
         filtered_df = filtered_df[filtered_df['CLASSE 1'].isin(filters['classe_1'])]
-    
+    if 'classe_2' in filters and filters['classe_2']:
+        filtered_df = filtered_df[filtered_df['CLASSE 2'].isin(filters['classe_2'])]
+
     if 'provider' in filters and filters['provider']:
         filtered_df = filtered_df[filtered_df['PROVIDER'].isin(filters['provider'])]
     
     if 'pea' in filters and filters['pea'] is not None:
         pea_filter = 'Y' if filters['pea'] else 'N'
-        filtered_df = filtered_df[filtered_df['PEA'] == pea_filter]
+        if 'PEA' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['PEA'].astype(str).str.upper() == pea_filter]
+
+    if 'assvie' in filters and filters['assvie'] is not None:
+        assvie_filter = 'Y' if filters['assvie'] else 'N'
+        if 'ASSVIE' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['ASSVIE'].astype(str).str.upper() == assvie_filter]
+
+    if 'frais_max' in filters and filters['frais_max'] is not None:
+        col_name = 'FRAIS DE GESTION'
+        if col_name in filtered_df.columns:
+            filtered_df = filtered_df[
+                pd.to_numeric(filtered_df[col_name], errors='coerce').fillna(float('inf')) <= filters['frais_max']
+            ]
     
-    if 'frais_max' in filters and filters['frais_max']:
-        filtered_df = filtered_df[filtered_df['FRAIS DE GESTION'] <= filters['frais_max']]
-    
+    # Filtre par broker(s)
+    broker_cols = ['XTB', 'ING', 'SCALABLE', 'EASYBOURSE', 'BOURSO', 'BOURSEDIRECT', 'ETORO']
+
+    if 'broker' in filters and filters['broker'] in broker_cols:
+        selected_broker = filters['broker']
+        filtered_df = filtered_df[filtered_df[selected_broker] == True]
+
+
     return filtered_df
 
 def calculate_portfolio_metrics(portfolio_data: List[Dict]) -> Dict:

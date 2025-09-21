@@ -15,6 +15,95 @@ st.set_page_config(
     layout="wide"
 )
 
+# Fonctions de gestion des doublons
+def detect_duplicate_position(new_position, portfolio):
+    """Détecte si une position identique existe déjà"""
+    for i, existing_pos in enumerate(portfolio):
+        if (existing_pos['isin'] == new_position['isin'] and
+            existing_pos['date_achat'] == new_position['date_achat'] and
+            existing_pos['quantite'] == new_position['quantite'] and
+            existing_pos['prix_achat'] == new_position['prix_achat']):
+            return i, 'exact'
+    return None, None
+
+def detect_similar_position(new_position, portfolio):
+    """Détecte si une position similaire existe (même ISIN et date)"""
+    for i, existing_pos in enumerate(portfolio):
+        if (existing_pos['isin'] == new_position['isin'] and
+            existing_pos['date_achat'] == new_position['date_achat']):
+            return i, 'similar'
+    return None, None
+
+def merge_positions(existing_pos, new_position):
+    """Fusionne deux positions en calculant le prix moyen pondéré"""
+    total_quantite = existing_pos['quantite'] + new_position['quantite']
+    total_cout = existing_pos['cout_acquisition'] + new_position['cout_acquisition']
+    prix_moyen = total_cout / total_quantite
+    
+    # Mise à jour de la position existante
+    existing_pos['quantite'] = total_quantite
+    existing_pos['prix_achat'] = prix_moyen
+    existing_pos['prix_actuel'] = new_position['prix_actuel']  # Dernier prix entré
+    existing_pos['cout_acquisition'] = total_cout
+    existing_pos['valeur_actuelle'] = total_quantite * new_position['prix_actuel']
+    
+    return existing_pos
+
+def add_position_with_duplicate_check(new_position, form_key):
+    """Ajoute une position avec vérification des doublons"""
+    # Vérification doublon exact
+    duplicate_idx, duplicate_type = detect_duplicate_position(new_position, st.session_state.portfolio)
+    
+    if duplicate_idx is not None:
+        st.warning("⚠️ **Position identique détectée!**")
+        st.write(f"Une position identique existe déjà: {st.session_state.portfolio[duplicate_idx]['nom']}")
+        
+        if st.checkbox(f"Confirmer l'ajout (doublera la quantité)", key=f"confirm_exact_{form_key}"):
+            # Fusionner les positions identiques
+            merged_pos = merge_positions(st.session_state.portfolio[duplicate_idx], new_position)
+            st.success(f"✅ Position fusionnée! Nouvelle quantité: {merged_pos['quantite']}")
+            return True
+        else:
+            st.info("❌ Position non ajoutée")
+            return False
+    
+    # Vérification position similaire
+    similar_idx, similar_type = detect_similar_position(new_position, st.session_state.portfolio)
+    
+    if similar_idx is not None:
+        existing = st.session_state.portfolio[similar_idx]
+        st.warning("⚠️ **Position similaire détectée!**")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("**Position existante:**")
+            st.write(f"Quantité: {existing['quantite']}")
+            st.write(f"Prix d'achat: {format_currency(existing['prix_achat'])}")
+        with col2:
+            st.write("**Nouvelle position:**")
+            st.write(f"Quantité: {new_position['quantite']}")
+            st.write(f"Prix d'achat: {format_currency(new_position['prix_achat'])}")
+        
+        if st.checkbox(f"Confirmer fusion (prix moyen pondéré)", key=f"confirm_similar_{form_key}"):
+            # Calculer et afficher le résultat de la fusion
+            total_qty = existing['quantite'] + new_position['quantite']
+            total_cost = existing['cout_acquisition'] + new_position['cout_acquisition']
+            avg_price = total_cost / total_qty
+            
+            st.info(f"**Résultat fusion:** {total_qty} parts à {format_currency(avg_price)} (prix moyen)")
+            
+            merged_pos = merge_positions(st.session_state.portfolio[similar_idx], new_position)
+            st.success(f"✅ Positions fusionnées!")
+            return True
+        else:
+            st.info("❌ Position non ajoutée")
+            return False
+    
+    # Aucun doublon, ajout normal
+    st.session_state.portfolio.append(new_position)
+    st.success(f"✅ Position ajoutée: {new_position['nom']}")
+    return True
+
 # Titre
 st.title("📂 Gestion Portfolio")
 
@@ -39,56 +128,63 @@ with tab1:
     with col1:
         st.write("**Option 1: Actif Manuel (libre)**")
         
-        with st.form("add_manual_position"):
-            nom_libre = st.text_input("Nom de l'actif", placeholder="Ex: Action Apple, Bitcoin, etc.")
-            isin_libre = st.text_input("Code/ISIN (optionnel)", placeholder="Ex: US0378331005")
+        
+        nom_libre = st.text_input("Nom de l'actif", placeholder="Ex: Action Apple, Bitcoin, etc.")
+        isin_libre = st.text_input("Code/ISIN (optionnel)", placeholder="Ex: US0378331005")
+        
+        col_qty, col_price = st.columns(2)
+        with col_qty:
+            quantite_libre = st.number_input("Quantité", min_value=1, value=1, step=1)
+        with col_price:
+            prix_achat_libre = st.number_input("Prix d'achat (€)", min_value=0.01, value=100.0, step=1.0)
+
+        prix_actuel_libre = st.number_input("Prix actuel (€)", min_value=0.01, value=100.0, step=1.0)
+        date_achat_libre = st.date_input("Date d'achat", value=date.today())
+        
+        # Calculs automatiques mis à jour en temps réel
+        cout_libre = quantite_libre * prix_achat_libre
+        valeur_libre = quantite_libre * prix_actuel_libre
+        pv_libre = valeur_libre - cout_libre
+        perf_libre = (pv_libre / cout_libre * 100) if cout_libre > 0 else 0
+        
+        st.write("**Résumé (Mise à jour automatique)**")
+        col1_res, col2_res = st.columns(2)
+        with col1_res:
+            st.metric("Coût", format_currency(cout_libre))
+            st.metric("Valeur", format_currency(valeur_libre))
+        with col2_res:
+            st.metric("Plus-value", format_currency(pv_libre), delta=f"{perf_libre:+.2f}%")
+            st.metric("Performance", f"{perf_libre:+.1f}%")
+    
+        with st.form("add_manual_position", clear_on_submit=False):
+            # Désactiver la soumission sur Entrée
+            submit_manual = st.form_submit_button("➕ Ajouter Position Manuel", type="primary", use_container_width=True)
             
-            col_qty, col_price = st.columns(2)
-            with col_qty:
-                quantite_libre = st.number_input("Quantité", min_value=1, value=1, step=1)
-            with col_price:
-                prix_achat_libre = st.number_input("Prix d'achat (€)", min_value=0.01, value=100.0, step=0.01)
-            
-            prix_actuel_libre = st.number_input("Prix actuel (€)", min_value=0.01, value=prix_achat_libre, step=0.01)
-            date_achat_libre = st.date_input("Date d'achat", value=date.today())
-            
-            # Calculs
-            cout_libre = quantite_libre * prix_achat_libre
-            valeur_libre = quantite_libre * prix_actuel_libre
-            pv_libre = valeur_libre - cout_libre
-            perf_libre = (pv_libre / cout_libre * 100) if cout_libre > 0 else 0
-            
-            st.write("**Résumé**")
-            col1_res, col2_res = st.columns(2)
-            with col1_res:
-                st.metric("Coût", format_currency(cout_libre))
-                st.metric("Valeur", format_currency(valeur_libre))
-            with col2_res:
-                st.metric("Plus-value", format_currency(pv_libre))
-                st.metric("Performance", f"{perf_libre:+.2f}%")
-            
-            if st.form_submit_button("➕ Ajouter Position Manuel", type="primary"):
-                if nom_libre:
-                    position_libre = {
-                        'isin': isin_libre or f"MANUAL_{len(st.session_state.portfolio)}",
-                        'nom': nom_libre,
-                        'provider': 'Manuel',
-                        'quantite': quantite_libre,
-                        'prix_achat': prix_achat_libre,
-                        'prix_actuel': prix_actuel_libre,
-                        'cout_acquisition': cout_libre,
-                        'valeur_actuelle': valeur_libre,
-                        'date_achat': str(date_achat_libre),
-                        'classe_1': 'Actif Manuel',
-                        'type': 'manuel',
-                        'frais': 0.0,
-                        'expected_return': 0.06  # 6% par défaut pour actifs manuels
-                    }
-                    st.session_state.portfolio.append(position_libre)
-                    st.success(f"✅ Position manuelle ajoutée: {nom_libre}")
-                    st.rerun()
-                else:
-                    st.error("Veuillez saisir un nom d'actif")
+        # Traitement uniquement si bouton cliqué ET nom renseigné
+        if submit_manual:
+            if nom_libre.strip():
+                position_libre = {
+                    'isin': isin_libre or f"MANUAL_{len(st.session_state.portfolio)}",
+                    'nom': nom_libre,
+                    'provider': 'Manuel',
+                    'quantite': quantite_libre,
+                    'prix_achat': prix_achat_libre,
+                    'prix_actuel': prix_actuel_libre,
+                    'cout_acquisition': cout_libre,
+                    'valeur_actuelle': valeur_libre,
+                    'date_achat': str(date_achat_libre),
+                    'classe_1': 'Actif Manuel',
+                    'type': 'manuel',
+                    'frais': 0.0,
+                    'expected_return': 0.06
+                }
+                st.session_state.portfolio.append(position_libre)
+                st.success(f"✅ Position ajoutée: {position_libre['nom']}")
+                st.rerun()
+                
+                
+            else:
+                st.error("⚠️ Veuillez saisir un nom d'actif")
     
     with col2:
         st.write("**Option 2: Recherche ETF dans la Base**")
@@ -123,7 +219,7 @@ with tab1:
                         with detail_col1:
                             st.write(f"**Fournisseur:** {selected_etf_data.get('PROVIDER', 'N/A')}")
                             st.write(f"**Frais:** {selected_etf_data.get('FRAIS DE GESTION', 0):.2f}%")
-                            st.write(f"**AUM:** {selected_etf_data.get('ENCOURS SOUS GESTION (EUR)', 0):.0f} M€")
+                            st.write(f"**AUM:** {selected_etf_data.get('ENCOURS SOUS GESTION (EUR)', 0):,.0f} M€".replace(',', ' '))
                         with detail_col2:
                             st.write(f"**PEA:** {'✅ Oui' if selected_etf_data.get('PEA') == 'Y' else '❌ Non'}")
                             st.write(f"**Assurance Vie:** {'✅ Oui' if selected_etf_data.get('ASSVIE') == 'Y' else '❌ Non'}")
@@ -133,55 +229,60 @@ with tab1:
                             st.write(f"**Rendement Attendu:** {expected_ret*100:.1f}%")
                     
                     # Formulaire d'ajout
-                    with st.form("add_etf_position"):
-                        st.write(f"**Position pour:** {selected_etf_data['NOM']}")
+                
+                    st.write(f"**Position pour:** {selected_etf_data['NOM']}")
+                    
+                    col_qty, col_price = st.columns(2)
+                    with col_qty:
+                        quantite_etf = st.number_input("Quantité", min_value=1, value=1, step=1, key="qty_etf")
+                    with col_price:
+                        prix_achat_etf = st.number_input("Prix d'achat (€)", min_value=0.01, value=100.0, step=1.0, key="price_etf")
+                    
+                    prix_actuel_etf = st.number_input("Prix actuel (€)", min_value=0.01, value=100.0, step=1.0, key="current_price_etf")
+                    date_achat_etf = st.date_input("Date d'achat", value=date.today(), key="date_etf")
+                    
+                    # Calculs automatiques mis à jour en temps réel
+                    cout_etf = quantite_etf * prix_achat_etf
+                    valeur_etf = quantite_etf * prix_actuel_etf
+                    pv_etf = valeur_etf - cout_etf
+                    perf_etf = (pv_etf / cout_etf * 100) if cout_etf > 0 else 0
+                    
+                    st.write("**Calculs Automatiques**")
+                    col1_calc, col2_calc = st.columns(2)
+                    with col1_calc:
+                        st.metric("Coût d'acquisition", format_currency(cout_etf))
+                        st.metric("Valeur actuelle", format_currency(valeur_etf))
+                    with col2_calc:
+                        st.metric("Plus-value", format_currency(pv_etf), delta=f"{perf_etf:+.2f}%")
+                        st.metric("Performance", f"{perf_etf:+.1f}%")
+                    with st.form("add_etf_position", clear_on_submit=False):
+                        submit_etf = st.form_submit_button("➕ Ajouter ETF au Portfolio", type="primary", use_container_width=True)
                         
-                        col_qty, col_price = st.columns(2)
-                        with col_qty:
-                            quantite_etf = st.number_input("Quantité", min_value=1, value=1, step=1, key="qty_etf")
-                        with col_price:
-                            prix_achat_etf = st.number_input("Prix d'achat (€)", min_value=0.01, value=100.0, step=0.01, key="price_etf")
+                    # Traitement uniquement si bouton cliqué
+                    if submit_etf:
+                        nouvelle_position = {
+                            'isin': selected_etf_data['ISIN'],
+                            'nom': selected_etf_data['NOM'],
+                            'provider': selected_etf_data.get('PROVIDER', 'N/A'),
+                            'quantite': quantite_etf,
+                            'prix_achat': prix_achat_etf,
+                            'prix_actuel': prix_actuel_etf,
+                            'cout_acquisition': cout_etf,
+                            'valeur_actuelle': valeur_etf,
+                            'date_achat': str(date_achat_etf),
+                            'classe_1': selected_etf_data.get('CLASSE 1', 'N/A'),
+                            'type': 'etf',
+                            'frais': selected_etf_data.get('FRAIS DE GESTION', 0),
+                            'expected_return': selected_etf_data.get('EXP_MACRO_RETURN', 5.0) / 100 if pd.notna(selected_etf_data.get('EXP_MACRO_RETURN', 5.0)) else 0.05,
+                            'aum': selected_etf_data.get('ENCOURS SOUS GESTION (EUR)', 0),
+                            'pea': selected_etf_data.get('PEA', 'N'),
+                            'assvie': selected_etf_data.get('ASSVIE', 'N'),
+                            'hedged': selected_etf_data.get('HEDGED', 'N')
+                        }
+                        st.session_state.portfolio.append(nouvelle_position)
                         
-                        prix_actuel_etf = st.number_input("Prix actuel (€)", min_value=0.01, value=prix_achat_etf, step=0.01, key="current_price_etf")
-                        date_achat_etf = st.date_input("Date d'achat", value=date.today(), key="date_etf")
-                        
-                        # Calculs
-                        cout_etf = quantite_etf * prix_achat_etf
-                        valeur_etf = quantite_etf * prix_actuel_etf
-                        pv_etf = valeur_etf - cout_etf
-                        perf_etf = (pv_etf / cout_etf * 100) if cout_etf > 0 else 0
-                        
-                        col1_calc, col2_calc = st.columns(2)
-                        with col1_calc:
-                            st.metric("Coût d'acquisition", format_currency(cout_etf))
-                            st.metric("Valeur actuelle", format_currency(valeur_etf))
-                        with col2_calc:
-                            st.metric("Plus-value", format_currency(pv_etf))
-                            st.metric("Performance", f"{perf_etf:+.2f}%")
-                        
-                        if st.form_submit_button("➕ Ajouter ETF au Portfolio", type="primary"):
-                            nouvelle_position = {
-                                'isin': selected_etf_data['ISIN'],
-                                'nom': selected_etf_data['NOM'],
-                                'provider': selected_etf_data.get('PROVIDER', 'N/A'),
-                                'quantite': quantite_etf,
-                                'prix_achat': prix_achat_etf,
-                                'prix_actuel': prix_actuel_etf,
-                                'cout_acquisition': cout_etf,
-                                'valeur_actuelle': valeur_etf,
-                                'date_achat': str(date_achat_etf),
-                                'classe_1': selected_etf_data.get('CLASSE 1', 'N/A'),
-                                'type': 'etf',
-                                'frais': selected_etf_data.get('FRAIS DE GESTION', 0),
-                                'expected_return': selected_etf_data.get('EXP_MACRO_RETURN', 5.0) / 100 if pd.notna(selected_etf_data.get('EXP_MACRO_RETURN', 5.0)) else 0.05,
-                                'aum': selected_etf_data.get('ENCOURS SOUS GESTION (EUR)', 0),
-                                'pea': selected_etf_data.get('PEA', 'N'),
-                                'assvie': selected_etf_data.get('ASSVIE', 'N'),
-                                'hedged': selected_etf_data.get('HEDGED', 'N')
-                            }
-                            st.session_state.portfolio.append(nouvelle_position)
-                            st.success(f"✅ ETF ajouté: {selected_etf_data['NOM']}")
-                            st.rerun()
+                        st.success(f"✅ Position ajoutée: {nouvelle_position['nom']}")
+                        st.rerun()
             else:
                 st.warning("Aucun ETF trouvé")
 
@@ -218,7 +319,7 @@ with tab2:
             
             with info_col2:
                 st.write(f"**Frais:** {selected_univers_etf.get('frais', 0):.2f}%")
-                st.write(f"**AUM:** {selected_univers_etf.get('aum', 0):.0f} M€")
+                st.write(f"**AUM:** {selected_univers_etf.get('aum', 0):,.0f} M€".replace(',', ' '))
                 st.write(f"**Rendement Attendu:** {selected_univers_etf.get('expected_return', 0.05)*100:.1f}%")
             
             with info_col3:
@@ -227,26 +328,26 @@ with tab2:
                 st.write(f"**Hedgé:** {'✅ Oui' if selected_univers_etf.get('hedged') == 'Y' else '❌ Non'}")
         
         # Formulaire d'ajout depuis l'univers
-        with st.form("add_from_univers"):
+        
             st.write(f"**Ajouter une position:** {selected_univers_etf['nom']}")
             
             pos_col1, pos_col2 = st.columns(2)
             
             with pos_col1:
                 quantite_univ = st.number_input("Quantité", min_value=1, value=1, step=1, key="qty_univ")
-                prix_achat_univ = st.number_input("Prix d'achat (€)", min_value=0.01, value=100.0, step=0.01, key="price_univ")
+                prix_achat_univ = st.number_input("Prix d'achat (€)", min_value=0.01, value=100.0, step=1.0, key="price_univ")
             
             with pos_col2:
-                prix_actuel_univ = st.number_input("Prix actuel (€)", min_value=0.01, value=prix_achat_univ, step=0.01, key="current_price_univ")
+                prix_actuel_univ = st.number_input("Prix actuel (€)", min_value=0.01, value=100.0, step=1.0, key="current_price_univ")
                 date_achat_univ = st.date_input("Date d'achat", value=date.today(), key="date_univ")
             
-            # Calculs automatiques
+            # Calculs automatiques mis à jour en temps réel
             cout_univ = quantite_univ * prix_achat_univ
             valeur_univ = quantite_univ * prix_actuel_univ
             pv_univ = valeur_univ - cout_univ
             perf_univ = (pv_univ / cout_univ * 100) if cout_univ > 0 else 0
             
-            st.write("**Résumé de la Position**")
+            st.write("**Résumé de la Position (Calcul automatique)**")
             calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
             
             with calc_col1:
@@ -256,31 +357,37 @@ with tab2:
             with calc_col3:
                 st.metric("Plus-value", format_currency(pv_univ))
             with calc_col4:
-                st.metric("Performance", f"{perf_univ:+.2f}%")
+                st.metric("Performance", f"{perf_univ:+.1f}%", delta=f"{pv_univ:+.0f}€")
+        with st.form("add_from_univers", clear_on_submit=False):
+            submit_univers = st.form_submit_button("➕ Ajouter au Portfolio", type="primary", use_container_width=True)
             
-            if st.form_submit_button("➕ Ajouter au Portfolio", type="primary"):
-                position_univers = {
-                    'isin': selected_univers_etf['isin'],
-                    'nom': selected_univers_etf['nom'],
-                    'provider': selected_univers_etf['provider'],
-                    'quantite': quantite_univ,
-                    'prix_achat': prix_achat_univ,
-                    'prix_actuel': prix_actuel_univ,
-                    'cout_acquisition': cout_univ,
-                    'valeur_actuelle': valeur_univ,
-                    'date_achat': str(date_achat_univ),
-                    'classe_1': selected_univers_etf.get('classe_1', 'N/A'),
-                    'type': 'etf',
-                    'frais': selected_univers_etf.get('frais', 0),
-                    'expected_return': selected_univers_etf.get('expected_return', 0.05),
-                    'aum': selected_univers_etf.get('aum', 0),
-                    'pea': selected_univers_etf.get('pea', 'N'),
-                    'assvie': selected_univers_etf.get('assvie', 'N'),
-                    'hedged': selected_univers_etf.get('hedged', 'N')
-                }
-                st.session_state.portfolio.append(position_univers)
-                st.success(f"✅ Position ajoutée depuis l'univers: {selected_univers_etf['nom']}")
-                st.rerun()
+        # Traitement uniquement si bouton cliqué
+        if submit_univers:
+            position_univers = {
+                'isin': selected_univers_etf['isin'],
+                'nom': selected_univers_etf['nom'],
+                'provider': selected_univers_etf['provider'],
+                'quantite': quantite_univ,
+                'prix_achat': prix_achat_univ,
+                'prix_actuel': prix_actuel_univ,
+                'cout_acquisition': cout_univ,
+                'valeur_actuelle': valeur_univ,
+                'date_achat': str(date_achat_univ),
+                'classe_1': selected_univers_etf.get('classe_1', 'N/A'),
+                'type': 'etf',
+                'frais': selected_univers_etf.get('frais', 0),
+                'expected_return': selected_univers_etf.get('expected_return', 0.05),
+                'aum': selected_univers_etf.get('aum', 0),
+                'pea': selected_univers_etf.get('pea', 'N'),
+                'assvie': selected_univers_etf.get('assvie', 'N'),
+                'hedged': selected_univers_etf.get('hedged', 'N')
+            }
+            st.session_state.portfolio.append(position_univers)
+            
+            st.success(f"✅ Position ajoutée: {position_univers['nom']}")
+            st.rerun()
+            
+
 
 with tab3:
     st.subheader("📋 Mes Positions Actuelles")
@@ -345,7 +452,7 @@ with tab3:
                     with detail_col2:
                         st.write("**ℹ️ Informations ETF**")
                         if position.get('type') == 'etf':
-                            st.write(f"AUM: {position.get('aum', 0):.0f} M€")
+                            st.write(f"AUM: {position.get('aum', 0):,.0f} M€".replace(',', ' '))
                             st.write(f"Rendement attendu: {position.get('expected_return', 0)*100:.1f}%")
                             st.write(f"PEA: {'✅ Oui' if position.get('pea') == 'Y' else '❌ Non'}")
                             st.write(f"Assurance Vie: {'✅ Oui' if position.get('assvie') == 'Y' else '❌ Non'}")
@@ -424,6 +531,7 @@ with tab4:
                                 'expected_return': row.get('expected_return', 0.05)
                             }
                             st.session_state.portfolio.append(position)
+    
                         
                         st.success(f"✅ {len(import_df)} positions importées!")
                         st.rerun()
