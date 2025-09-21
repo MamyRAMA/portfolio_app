@@ -192,14 +192,13 @@ def get_portfolio_allocation(portfolio_data: List[Dict], etf_data: pd.DataFrame)
         valeur = position.get('valeur_actuelle', 0)
         
         # Trouver les informations ETF
-        etf_info = etf_data[etf_data['ISIN'] == isin]
-        if not etf_info.empty:
-            categorie = etf_info.iloc[0].get('CLASSE 1', 'Autre')
-            allocation_data.append({
-                'Catégorie': categorie,
-                'Valeur': valeur,
-                'Pourcentage': (valeur / total_value * 100) if total_value > 0 else 0
-            })
+        
+        categorie = position.get('classe_1', 'N/A')
+        allocation_data.append({
+            'Catégorie': categorie,
+            'Valeur': valeur,
+            'Pourcentage': (valeur / total_value * 100) if total_value > 0 else 0
+        })
     
     if allocation_data:
         df_allocation = pd.DataFrame(allocation_data)
