@@ -15,94 +15,22 @@ st.set_page_config(
     layout="wide"
 )
 
-# Fonctions de gestion des doublons
-def detect_duplicate_position(new_position, portfolio):
-    """Détecte si une position identique existe déjà"""
-    for i, existing_pos in enumerate(portfolio):
-        if (existing_pos['isin'] == new_position['isin'] and
-            existing_pos['date_achat'] == new_position['date_achat'] and
-            existing_pos['quantite'] == new_position['quantite'] and
-            existing_pos['prix_achat'] == new_position['prix_achat']):
-            return i, 'exact'
-    return None, None
+ASSET_TYPE_TO_CLASSE1 = {
+    "Action": "equities",
+    "Crypto": "crypto",
+    "Obligation": "bonds",
+    "Immobilier": "real estate",
+    "Livret": "cash",
+    "Matières Premières": "commodities",
+    "Monétaire": "cash",
+    "Titrisé": "securitized",
+    "Autre": "other",
+    "Actif Manuel": "other"  # valeur de secours
+}
 
-def detect_similar_position(new_position, portfolio):
-    """Détecte si une position similaire existe (même ISIN et date)"""
-    for i, existing_pos in enumerate(portfolio):
-        if (existing_pos['isin'] == new_position['isin'] and
-            existing_pos['date_achat'] == new_position['date_achat']):
-            return i, 'similar'
-    return None, None
-
-def merge_positions(existing_pos, new_position):
-    """Fusionne deux positions en calculant le prix moyen pondéré"""
-    total_quantite = existing_pos['quantite'] + new_position['quantite']
-    total_cout = existing_pos['cout_acquisition'] + new_position['cout_acquisition']
-    prix_moyen = total_cout / total_quantite
-    
-    # Mise à jour de la position existante
-    existing_pos['quantite'] = total_quantite
-    existing_pos['prix_achat'] = prix_moyen
-    existing_pos['prix_actuel'] = new_position['prix_actuel']  # Dernier prix entré
-    existing_pos['cout_acquisition'] = total_cout
-    existing_pos['valeur_actuelle'] = total_quantite * new_position['prix_actuel']
-    
-    return existing_pos
-
-def add_position_with_duplicate_check(new_position, form_key):
-    """Ajoute une position avec vérification des doublons"""
-    # Vérification doublon exact
-    duplicate_idx, duplicate_type = detect_duplicate_position(new_position, st.session_state.portfolio)
-    
-    if duplicate_idx is not None:
-        st.warning("⚠️ **Position identique détectée!**")
-        st.write(f"Une position identique existe déjà: {st.session_state.portfolio[duplicate_idx]['nom']}")
-        
-        if st.checkbox(f"Confirmer l'ajout (doublera la quantité)", key=f"confirm_exact_{form_key}"):
-            # Fusionner les positions identiques
-            merged_pos = merge_positions(st.session_state.portfolio[duplicate_idx], new_position)
-            st.success(f"✅ Position fusionnée! Nouvelle quantité: {merged_pos['quantite']}")
-            return True
-        else:
-            st.info("❌ Position non ajoutée")
-            return False
-    
-    # Vérification position similaire
-    similar_idx, similar_type = detect_similar_position(new_position, st.session_state.portfolio)
-    
-    if similar_idx is not None:
-        existing = st.session_state.portfolio[similar_idx]
-        st.warning("⚠️ **Position similaire détectée!**")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write("**Position existante:**")
-            st.write(f"Quantité: {existing['quantite']}")
-            st.write(f"Prix d'achat: {format_currency(existing['prix_achat'])}")
-        with col2:
-            st.write("**Nouvelle position:**")
-            st.write(f"Quantité: {new_position['quantite']}")
-            st.write(f"Prix d'achat: {format_currency(new_position['prix_achat'])}")
-        
-        if st.checkbox(f"Confirmer fusion (prix moyen pondéré)", key=f"confirm_similar_{form_key}"):
-            # Calculer et afficher le résultat de la fusion
-            total_qty = existing['quantite'] + new_position['quantite']
-            total_cost = existing['cout_acquisition'] + new_position['cout_acquisition']
-            avg_price = total_cost / total_qty
-            
-            st.info(f"**Résultat fusion:** {total_qty} parts à {format_currency(avg_price)} (prix moyen)")
-            
-            merged_pos = merge_positions(st.session_state.portfolio[similar_idx], new_position)
-            st.success(f"✅ Positions fusionnées!")
-            return True
-        else:
-            st.info("❌ Position non ajoutée")
-            return False
-    
-    # Aucun doublon, ajout normal
-    st.session_state.portfolio.append(new_position)
-    st.success(f"✅ Position ajoutée: {new_position['nom']}")
-    return True
+def map_user_type_to_classe1(user_type):
+    """Retourne la CLASSE 1 correspondant au type choisi par l'utilisateur."""
+    return ASSET_TYPE_TO_CLASSE1.get(user_type)
 
 # Titre
 st.title("📂 Gestion Portfolio")
@@ -131,7 +59,9 @@ with tab1:
         
         nom_libre = st.text_input("Nom de l'actif", placeholder="Ex: Action Apple, Bitcoin, etc.")
         isin_libre = st.text_input("Code/ISIN (optionnel)", placeholder="Ex: US0378331005")
-        
+        type_libre = st.selectbox("Type d'actif", ["Action", "Crypto", "Obligation", "Immobilier", "Livret", "Matières Premières", "Monétaire","Titrisé", "Autre"], index=0)
+        type_libre = map_user_type_to_classe1(type_libre)
+
         col_qty, col_price = st.columns(2)
         with col_qty:
             quantite_libre = st.number_input("Quantité", min_value=1, value=1, step=1)
@@ -173,7 +103,7 @@ with tab1:
                     'cout_acquisition': cout_libre,
                     'valeur_actuelle': valeur_libre,
                     'date_achat': str(date_achat_libre),
-                    'classe_1': 'Actif Manuel',
+                    'classe_1': type_libre,
                     'type': 'manuel',
                     'frais': 0.0,
                     'expected_return': 0.06
